@@ -3,6 +3,11 @@ const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://voice-over-h-58fb93f16e6b.herokuapp.com");
+  next();
+});
+
 app.use(cors({
   origin: 'https://voice-over-h-58fb93f16e6b.herokuapp.com/'
 }));
