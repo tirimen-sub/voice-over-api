@@ -171,6 +171,27 @@ app.post('/responses', upload.single('audio'), async (req, res) => {
   }
 });
 
+// （既存コードの末尾あたりに追記してください）
+
+/**
+ * 質問に紐づく音声回答一覧を返す
+ * GET /responses/:questionId
+ */
+app.get('/responses/:questionId', (req, res) => {
+  const qid = req.params.questionId;
+  db.all(
+    `SELECT audio_url FROM responses WHERE question_id = ? ORDER BY created_at`,
+    [qid],
+    (err, rows) => {
+      if (err) {
+        console.error('[DB] SELECT responses error:', err.message);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ message: 'success', data: rows });
+    }
+  );
+});
+
 // サーバ起動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
