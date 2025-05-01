@@ -47,8 +47,7 @@ const db = new sqlite3.Database(DB_PATH, err => {
         question_id  INTEGER NOT NULL,
         audio_url    TEXT    NOT NULL,
         created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (question_id)
-          REFERENCES questions(id) ON DELETE CASCADE
+        FOREIGN KEY(question_id) REFERENCES questions(id) ON DELETE CASCADE
       );
     `);
     console.log('[DB] Tables ensured: questions, responses');
