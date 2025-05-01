@@ -13,12 +13,7 @@ const app = express();
 // CORS 設定（プリフライト対応も含む）
 const corsOptions = {
   origin: 'https://voice-over-h-58fb93f16e6b.herokuapp.com',
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-  credentials: true,
-  optionsSuccessStatus: 204
 };
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 // JSON ボディパーサー
 app.use(express.json());
