@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
+const multer = require('multer');
 require('dotenv').config(); // 環境変数を読み込む
 
 const AWS = require('aws-sdk');
+
 const fs = require('fs');
 
 const app = express();
