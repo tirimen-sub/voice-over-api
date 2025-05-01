@@ -10,10 +10,10 @@ const path      = require('path');
 
 const app = express();
 
-// CORS 設定（プリフライト対応も含む）
-const corsOptions = {
-  origin: 'https://voice-over-h-58fb93f16e6b.herokuapp.com',
-};
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://voice-over-h-58fb93f16e6b.herokuapp.com");
+  next();
+});
 
 // JSON ボディパーサー
 app.use(express.json());
