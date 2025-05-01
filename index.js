@@ -8,9 +8,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors({
-  origin: 'https://voice-over-h-58fb93f16e6b.herokuapp.com/'
-}));
 
 app.use(express.json());
 
