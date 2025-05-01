@@ -4,6 +4,10 @@ const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 app.use(cors());
+app.use(cors({
+  origin: 'https://voice-over-h-58fb93f16e6b.herokuapp.com'
+}));
+
 app.use(express.json());
 
 const db = new sqlite3.Database('./db/db.sqlite', (err) => {
