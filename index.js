@@ -15,6 +15,12 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(cors({
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']   // 必要に応じて追加
+}));
+
+
 // JSON ボディパーサー
 app.use(express.json());
 
