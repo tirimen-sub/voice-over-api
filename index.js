@@ -1,66 +1,25 @@
-// index.js
 require('dotenv').config();
-const express   = require('express');
-const cors      = require('cors');
-const sqlite3   = require('sqlite3').verbose();
-const multer    = require('multer');
-const AWS       = require('aws-sdk');
-const fs        = require('fs');
-const path      = require('path');
+const express = require('express');
+const cors    = require('cors');
+const multer  = require('multer');
+const AWS     = require('aws-sdk');
+const fs      = require('fs');
+const path    = require('path');
+
+const { pool, init } = require('./db');
 
 const app = express();
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://voice-over-h-58fb93f16e6b.herokuapp.com");
-  next();
-});
-
+// CORS設定（必要に応じてオリジンを調整）
 app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']   // 必要に応じて追加
+  allowedHeaders: ['Content-Type','Authorization']
 }));
 
-
-// JSON ボディパーサー
 app.use(express.json());
 
-// SQLite DB 接続 & テーブル初期化
-const DB_DIR  = path.resolve(__dirname, 'db');
-const DB_PATH = path.join(DB_DIR, 'db.sqlite');
-
-// DB ディレクトリがなければ作成
-if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
-
-const db = new sqlite3.Database(DB_PATH, err => {
-  if (err) {
-    console.error('[DB ERROR]', err.message);
-    process.exit(1);
-  }
-  console.log('[DB] Connected:', DB_PATH);
-
-  // テーブルを作成（起動時に必ず実行）
-  db.serialize(() => {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS questions (
-        id        INTEGER PRIMARY KEY AUTOINCREMENT,
-        text      TEXT    NOT NULL,
-        answered  INTEGER NOT NULL DEFAULT 0
-      );
-    `);
-    db.run(`
-      CREATE TABLE IF NOT EXISTS responses (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        question_id  INTEGER NOT NULL,
-        audio_url    TEXT    NOT NULL,
-        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(question_id) REFERENCES questions(id) ON DELETE CASCADE
-      );
-    `);
-    console.log('[DB] Tables ensured: questions, responses');
-  });
-});
-
-// AWS S3 設定（Signature V4 を明示）
+// S3設定
 AWS.config.update({
   accessKeyId:     process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -68,62 +27,57 @@ AWS.config.update({
 });
 const s3 = new AWS.S3({ signatureVersion: 'v4' });
 
-// multer セットアップ（uploads/ フォルダに一時保存）
+// multer（一時ディレクトリ）
 const UPLOAD_DIR = path.resolve(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 const upload = multer({ dest: UPLOAD_DIR });
 
-/**
- * 質問一覧取得
- * GET /questions
- */
-app.get('/questions', (req, res) => {
-  db.all('SELECT * FROM questions', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'success', data: rows });
-  });
+// サーバ起動前にDB初期化
+init().catch(err => {
+  console.error('[DB] init failed', err);
+  process.exit(1);
 });
 
 /**
- * 新規質問追加
- * POST /questions
- * { text: string }
+ * GET /questions
  */
-app.post('/questions', (req, res) => {
+app.get('/questions', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM questions ORDER BY id');
+    res.json({ message: 'success', data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /questions
+ */
+app.post('/questions', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
 
-  db.run(
-    `INSERT INTO questions (text, answered) VALUES (?, 0)`,
-    [text],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({
-        message: 'success',
-        data: { id: this.lastID, text, answered: 0 }
-      });
-    }
-  );
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO questions(text) VALUES($1) RETURNING *',
+      [text]
+    );
+    res.json({ message: 'success', data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
- * 音声回答受け取り → S3 アップロード → DB 登録
  * POST /responses
- * FormData:
- *   - questionId: number
- *   - audio     : Blob (field name 'audio')
  */
 app.post('/responses', upload.single('audio'), async (req, res) => {
   try {
-    const questionId = req.body.questionId;
-    if (!questionId) {
-      return res.status(400).json({ error: 'questionId is required' });
-    }
-    if (!req.file) {
-      return res.status(400).json({ error: 'audio file is required' });
-    }
+    const { questionId } = req.body;
+    if (!questionId)  return res.status(400).json({ error: 'questionId is required' });
+    if (!req.file)    return res.status(400).json({ error: 'audio file is required' });
 
-    // S3 へアップロード
+    // S3アップロード
     const key = `responses/${questionId}/${Date.now()}-${req.file.originalname}`;
     const fileStream = fs.createReadStream(req.file.path);
     const params = {
@@ -134,72 +88,53 @@ app.post('/responses', upload.single('audio'), async (req, res) => {
     };
     const uploadResult = await s3.upload(params).promise();
 
-    // 一時ファイルを削除
-    fs.unlink(req.file.path, unlinkErr => {
-      if (unlinkErr) console.warn('[Upload] tmp file delete failed:', unlinkErr);
-    });
+    // 一時ファイル削除
+    fs.unlink(req.file.path, _=>{});
 
-    // DB に記録
-    const audioUrl = uploadResult.Location;
-    db.run(
-      `INSERT INTO responses (question_id, audio_url) VALUES (?, ?)`,
-      [questionId, audioUrl],
-      function(err) {
-        if (err) {
-          console.error('[DB] insert responses error:', err.message);
-          return res.status(500).json({ error: err.message });
-        }
+    // DB登録 & 質問をansweredに更新
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const resp = await client.query(
+        'INSERT INTO responses(question_id, audio_url) VALUES($1,$2) RETURNING *',
+        [questionId, uploadResult.Location]
+      );
+      await client.query(
+        'UPDATE questions SET answered = TRUE WHERE id = $1',
+        [questionId]
+      );
+      await client.query('COMMIT');
+      res.json({ message: 'success', data: resp.rows[0] });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
 
-        // 質問を回答済みに更新
-        db.run(
-          `UPDATE questions SET answered = 1 WHERE id = ?`,
-          [questionId],
-          updateErr => {
-            if (updateErr) {
-              console.warn('[DB] update question answered failed:', updateErr.message);
-            }
-            // 完了レスポンス
-            res.json({
-              message: 'success',
-              data: {
-                responseId: this.lastID,
-                questionId,
-                audioUrl
-              }
-            });
-          }
-        );
-      }
-    );
   } catch (err) {
-    console.error('[POST /responses]', err);
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// （既存コードの末尾あたりに追記してください）
-
 /**
- * 質問に紐づく音声回答一覧を返す
  * GET /responses/:questionId
  */
-app.get('/responses/:questionId', (req, res) => {
-  const qid = req.params.questionId;
-  db.all(
-    `SELECT audio_url FROM responses WHERE question_id = ? ORDER BY created_at`,
-    [qid],
-    (err, rows) => {
-      if (err) {
-        console.error('[DB] SELECT responses error:', err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ message: 'success', data: rows });
-    }
-  );
+app.get('/responses/:questionId', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT audio_url, created_at FROM responses WHERE question_id = $1 ORDER BY created_at',
+      [req.params.questionId]
+    );
+    res.json({ message: 'success', data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // サーバ起動
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`[Server] Listening on port ${PORT}`);
+app.listen(PORT, _=>{
+  console.log(`[Server] listening on ${PORT}`);
 });

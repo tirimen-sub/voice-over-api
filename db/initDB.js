@@ -1,52 +1,35 @@
-// initDB.js
-const sqlite3 = require('sqlite3').verbose();
-const path    = require('path');
+// db.js
+const { Pool } = require('pg');
 
-// DB ファイルのパス
-const DB_PATH = path.resolve(__dirname, 'db.sqlite');
-
-// データベース接続
-const db = new sqlite3.Database(DB_PATH, err => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-    process.exit(1);
+// DATABASE_URLはHerokuが自動で注入してくれます
+// ローカル開発時は .env に以下のように書いておく
+// DATABASE_URL=postgres://ユーザ:パスワード@ホスト:ポート/データベース名
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    // Heroku Postgres を使う場合にはrejectUnauthorized: falseが必要
+    rejectUnauthorized: false
   }
-  console.log('Connected to SQLite database.');
 });
 
-db.serialize(() => {
-  // 質問テーブル
-  db.run(`
+async function init() {
+  // 起動時にテーブルを作成
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS questions (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      text      TEXT    NOT NULL,
-      answered  INTEGER NOT NULL DEFAULT 0
+      id SERIAL PRIMARY KEY,
+      text TEXT NOT NULL,
+      answered BOOLEAN NOT NULL DEFAULT FALSE
     );
-  `, err => {
-    if (err) console.error('Create questions table error:', err.message);
-    else        console.log('questions table ready');
-  });
-
-  // 応答テーブル
-  db.run(`
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS responses (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      question_id  INTEGER NOT NULL,
-      audio_path   TEXT    NOT NULL,
-      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+      id SERIAL PRIMARY KEY,
+      question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+      audio_url TEXT NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-  `, err => {
-    if (err) console.error('Create responses table error:', err.message);
-    else        console.log('responses table ready');
-  });
-});
+  `);
+  console.log('[DB] Tables ensured');
+}
 
-// DB クローズ
-db.close(err => {
-  if (err) {
-    console.error('Error closing database:', err.message);
-  } else {
-    console.log('Database connection closed.');
-  }
-});
+module.exports = { pool, init };
