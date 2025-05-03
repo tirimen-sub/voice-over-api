@@ -9,7 +9,7 @@ const path    = require('path');
 const { pool, init } = require('./db/initDB');
 const app = express();
 
-// CORS設定（必要に応じてオリジンを調整する)
+// CORS設定（必要に応じてオリジンを調整)
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
