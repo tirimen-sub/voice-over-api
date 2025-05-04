@@ -26,7 +26,7 @@ AWS.config.update({
 });
 const s3 = new AWS.S3({ signatureVersion: 'v4' });
 
-// multer（一時ディレクトリ）
+// multer（一時ディレクトリ
 const UPLOAD_DIR = path.resolve(__dirname, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 const upload = multer({ dest: UPLOAD_DIR });
