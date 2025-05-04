@@ -12,6 +12,8 @@ const ALLOWED_IPS = [
   '193.186.4.181'
 ];
 
+app.set('trust proxy', true);
+
 // CORS設定（必要に応じてオリジン調整)
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
@@ -44,20 +46,16 @@ init().catch(err => {
 /**
  * GET /questions
  */
-// 2) IP チェック用エンドポイント
 app.get('/api/check-ip', (req, res) => {
-  // Heroku 等のプロキシ配下では x-forwarded-for、そうでなければ req.connection.remoteAddress
-  const ip = (
-    req.headers['x-forwarded-for'] ||
-    req.connection.remoteAddress ||
-    ''
-  )
-  .split(',')
-  .shift()
-  .trim();
+  // req.ip で “x-forwarded-for” を踏まえたクライアントIPが取れる
+  const clientIp = req.ip;
+  const allowed = ALLOWED_IPS.includes(clientIp);
 
-  const allowed = ALLOWED_IPS.includes(ip);
-  res.json({ allowed });  // { "allowed": true } か { "allowed": false }
+  // デバッグ用にコンソール出力
+  console.log(`[check-ip] clientIp=${clientIp}, allowed=${allowed}`);
+
+  // レスポンスにも IP を乗せる
+  res.json({ allowed, clientIp });
 });
 
 
