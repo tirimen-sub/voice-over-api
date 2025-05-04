@@ -8,6 +8,9 @@ const path    = require('path');
 
 const { pool, init } = require('./db/initDB');
 const app = express();
+const ALLOWED_IPS = [
+  '193.186.4.181'
+];
 
 // CORS設定（必要に応じてオリジン調整)
 app.use(cors({
@@ -17,6 +20,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
 
 // S3設定
 AWS.config.update({
@@ -40,6 +44,24 @@ init().catch(err => {
 /**
  * GET /questions
  */
+// 2) IP チェック用エンドポイント
+app.get('/api/check-ip', (req, res) => {
+  // Heroku 等のプロキシ配下では x-forwarded-for、そうでなければ req.connection.remoteAddress
+  const ip = (
+    req.headers['x-forwarded-for'] ||
+    req.connection.remoteAddress ||
+    ''
+  )
+  .split(',')
+  .shift()
+  .trim();
+
+  const allowed = ALLOWED_IPS.includes(ip);
+  res.json({ allowed });  // { "allowed": true } か { "allowed": false }
+});
+
+
+
 app.get('/questions', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM questions ORDER BY id');
@@ -134,6 +156,6 @@ app.get('/responses/:questionId', async (req, res) => {
 
 // サーバ起動
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, _=>{
+app.listen(PORT, () => {
   console.log(`[Server] listening on ${PORT}`);
 });
