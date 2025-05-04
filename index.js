@@ -9,7 +9,8 @@ const path    = require('path');
 const { pool, init } = require('./db/initDB');
 const app = express();
 const ALLOWED_IPS = [
-  '193.186.4.181'
+  '193.186.4.181',
+  '106.133.48.188'
 ];
 
 app.set('trust proxy', true);
