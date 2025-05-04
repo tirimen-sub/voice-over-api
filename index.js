@@ -11,7 +11,8 @@ const app = express();
 const ALLOWED_IPS = [
   '193.186.4.181',
   '106.133.48.188',
-  '150.31.249.148'
+  '150.31.249.148',
+  '106.146.18.14'
 ];
 
 app.set('trust proxy', true);
